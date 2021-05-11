@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ author.get_full_name }} | @{{ username }}{% endblock %}
+{% block header %}Пост пользователя {{ author.get_full_name }}{% endblock %}
+{% block content %}
+
+{% include 'includes/user_stats.html' %}
+{% include "includes/post_item.html" with post=requested_post %}
+
+{% include 'includes/comments.html' %}
+{% endblock %}

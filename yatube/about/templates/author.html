@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Об авторе проекта{% endblock %}
+{% block content %}
+{% load static %}
+{% load user_filters %}
+  <main role="main" class="container">
+    <div class="row">
+      <div class="col-md-3 mb-3 mt-1">
+        <div class="card">
+          <div class="card-body">
+            <ul class="list-group list-group-flush">
+              <li class="list-group-item">
+                <div class="h3">
+                  Об авторе
+                </div> 
+              </li>
+              <li class="list-group-item">
+                <div class="h6 text-muted">
+                  Страница с информацией об авторе, очевидно
+                </div>
+              </li>
+            </ul>                                               
+          </div>                    
+        </div>                
+      </div>
+      <div class="col-md-9">
+        <div class="card-body">                    
+          <div class="card-text">
+            <a class="p-2 text-dark" href="https://github.com/mironovev">GitHub</a><hr>
+            <p>Тут вообще текст есть.</p>
+            <p>Интересный такой текст.</p>
+            <p>Да.</p>
+            <img src="{% static 'img/interesting_image.jpg' %}" alt="Интересная картинка, которая отказывается грузиться."/>
+          </div>                    
+        </div>                
+      </div>            
+    </div>        
+  </main>
+{% endblock %} 
