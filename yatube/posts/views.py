@@ -139,7 +139,7 @@ def profile_follow(request, username):
     possible_follow_link = len(
         Follow.objects.filter(user=request.user, author=author)
     )
-    if possible_follow_link < 1:
+    if possible_follow_link < 1 and request.user != author:
         Follow.objects.create(
             user=request.user,
             author=author
