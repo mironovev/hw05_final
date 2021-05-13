@@ -3,7 +3,7 @@ import shutil
 import tempfile
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django import forms
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -11,16 +11,32 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.cache.utils import make_template_fragment_key
 
-from ..models import Follow, Post, Group
+from ..models import Follow, Post, Group, Comment
 
 User = get_user_model()
 
 
+def compare_posts(post1: Post, post2: Post) -> bool:
+    '''Сравниваем содержимое двух постов'''
+    trigger = True
+    pairs = [
+        [post1.text, post2.text],
+        [post1.author, post2.author],
+        [post1.group, post2.group],
+        [post1.image.name, post2.image.name]  # Тут assertContains не вставить
+    ]
+    counter = 0
+    while trigger and counter < 4:
+        trigger = pairs[counter][0] == pairs[counter][1]
+        counter += 1
+    return trigger
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp(dir=settings.BASE_DIR))
 class PostPagesTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        settings.MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
         cls.test_author = User.objects.create(username='TestAuthor')
         cls.user = User.objects.create_user(username='TestUser')
         cls.user2 = User.objects.create_user(username='TestUser2')
@@ -68,6 +84,11 @@ class PostPagesTests(TestCase):
             author=cls.user,
             group=cls.group2,
             image=uploaded
+        )
+        cls.comment1 = Comment.objects.create(
+            post=cls.post1,
+            author=cls.user,
+            text='Тестовый текст комментария'
         )
         cls.follow_relation1 = Follow.objects.create(
             user=cls.user,
@@ -126,14 +147,7 @@ class PostPagesTests(TestCase):
         '''Шаблон home сформирован с правильным контекстом.'''
         response = self.guest_client.get(reverse('index'))
         latest_object = response.context.get('page').object_list[0]
-        post_text_0 = latest_object.text
-        post_author_0 = latest_object.author
-        post_group_0 = latest_object.group
-        post_image_0 = latest_object.image
-        self.assertEqual(post_text_0, self.post3.text)
-        self.assertEqual(post_author_0, self.post3.author)
-        self.assertEqual(post_group_0, self.post3.group)
-        self.assertEqual(post_image_0, self.post3.image)
+        self.assertTrue(compare_posts(latest_object, self.post3))
 
     def test_home_page_context_length(self):
         '''Все посты из бд попали на главную'''
@@ -146,14 +160,7 @@ class PostPagesTests(TestCase):
             reverse('group_posts', kwargs={'slug': self.group1.slug})
         )
         latest_object = response.context.get('page').object_list[0]
-        post_text_0 = latest_object.text
-        post_author_0 = latest_object.author
-        post_group_0 = latest_object.group
-        post_image_0 = latest_object.image
-        self.assertEqual(post_text_0, self.post1.text)
-        self.assertEqual(post_author_0, self.test_author)
-        self.assertEqual(post_group_0, self.group1)
-        self.assertEqual(post_image_0, self.post1.image)
+        self.assertTrue(compare_posts(latest_object, self.post1))
 
     def test_empty_group_page_objects(self):
         '''Посты, которые не пренадлежат группе,
@@ -189,20 +196,13 @@ class PostPagesTests(TestCase):
                                        self.test_author.username})
         )
         latest_object = response.context.get('page').object_list[0]
-        post_text_0 = latest_object.text
-        post_author_0 = latest_object.author
-        post_group_0 = latest_object.group
-        post_image_0 = latest_object.image
         author = response.context.get('author')
         username = response.context.get('username')
         page = response.context.get('page')
-        self.assertEqual(post_text_0, self.post2.text)
-        self.assertEqual(post_author_0, self.post2.author)
-        self.assertEqual(post_group_0, self.post2.group)
+        self.assertTrue(compare_posts(latest_object, self.post2))
         self.assertEqual(author, self.test_author)
         self.assertEqual(username, self.test_author.username)
         self.assertEqual(page.number, 1)
-        self.assertEqual(post_image_0, self.post2.image)
 
     def test_post_page_context(self):
         '''Шаблон post сформирован с правильным контекстом'''
@@ -214,11 +214,24 @@ class PostPagesTests(TestCase):
         )
         username = response.context.get('username')
         author = response.context.get('author')
+        comment = response.context.get('comments')[0]
         requested_post = response.context.get('requested_post')
         self.assertEqual(username, self.test_author.username)
         self.assertEqual(author, self.test_author)
-        self.assertEqual(requested_post.text, self.post1.text)
-        self.assertEqual(requested_post.image, self.post1.image)
+        self.assertEqual(comment.text, self.comment1.text)
+        self.assertEqual(comment.post, self.comment1.post)
+        self.assertEqual(comment.author, self.comment1.author)
+        self.assertTrue(compare_posts(requested_post, self.post1))
+
+    def test_post_page_no_comments(self):
+        '''На странице с постом без комментариев нет комментариев'''
+        response = self.guest_client.get(
+            reverse('post', kwargs={
+                'username': self.test_author.username,
+                'post_id': self.post2.id
+            })
+        )
+        self.assertEqual(len(response.context.get('comments')), 0)
 
     def test_edit_post_page_context(self):
         '''Шаблон post_edit сформирован с правильным контекстом'''
@@ -239,26 +252,24 @@ class PostPagesTests(TestCase):
                 form_field = response.context['form'].fields[value]
                 self.assertIsInstance(form_field, expected)
         self.assertTrue(is_edit)
-        self.assertEqual(post.text, self.post1.text)
+        self.assertTrue(compare_posts(post, self.post1))
 
     def test_follow_index_context(self):
         '''Шаблон follow сформирован с правильным контекстом.'''
         response = self.authorized_client.get(reverse('follow_index'))
         latest_object = response.context.get('page').object_list[0]
-        post_text_0 = latest_object.text
-        post_author_0 = latest_object.author
-        post_group_0 = latest_object.group
-        post_image_0 = latest_object.image
-        self.assertEqual(post_text_0, self.post2.text)
-        self.assertEqual(post_author_0, self.post2.author)
-        self.assertEqual(post_group_0, self.post2.group)
-        self.assertEqual(post_image_0, self.post2.image)
+        self.assertTrue(compare_posts(latest_object, self.post2))
 
     def test_follow_index_no_other_posts(self):
         '''В follow только посты от авторов, на которых подписан
         пользователь'''
         response = self.authorized_client.get(reverse('follow_index'))
         self.assertEqual(len(response.context.get('page').object_list), 2)
+
+    def test_follow_index_empty(self):
+        '''В follow пост пользователя не появляется для тех кто не подписан'''
+        response = self.authorized_author_client.get(reverse('follow_index'))
+        self.assertEqual(len(response.context.get('page').object_list), 0)
 
     def test_unfollow_author(self):
         '''Проверка отписки'''
@@ -269,6 +280,7 @@ class PostPagesTests(TestCase):
             user=self.follow_relation1.user,
             author=self.follow_relation1.author
         ).exists())
+        self.assertEqual(Follow.objects.count(), 2)
 
     def test_follow_author(self):
         '''Проверка подписки'''
@@ -279,6 +291,7 @@ class PostPagesTests(TestCase):
             user=self.follow_relation1.user,
             author=self.follow_relation1.author
         ).exists())
+        self.assertEqual(Follow.objects.count(), 3)
 
     def test_cache(self):
         '''Проверка кэширования'''

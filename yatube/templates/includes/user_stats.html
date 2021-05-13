@@ -20,7 +20,19 @@
             <div class="h6 text-muted">
               Записей: {{ author.posts.count }}
             </div>
+            {% if following %}
+            <a class="btn btn-lg btn-light" 
+              href="{% url 'profile_unfollow' username %}" role="button"> 
+              Отписаться 
+            </a> 
+            {% else %}
+              <a class="btn btn-lg btn-primary" 
+                href="{% url 'profile_follow' username %}" role="button">
+                Подписаться 
+              </a>
+            {% endif %}
           </li>
+          
         </ul>
       </div>
     </div>
