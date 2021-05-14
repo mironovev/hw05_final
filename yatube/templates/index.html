@@ -4,7 +4,7 @@
 {% block content %}
     <div class="container">
 
-            {% include "includes/menu.html" with index=True%}
+           {% include "includes/menu.html" with index=True%}
 
            {% load cache %}
            {% cache 20 post_list_index %}
