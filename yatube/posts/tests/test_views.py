@@ -1,4 +1,3 @@
-from time import sleep
 import shutil
 import tempfile
 
@@ -14,22 +13,6 @@ from django.core.cache.utils import make_template_fragment_key
 from ..models import Follow, Post, Group, Comment
 
 User = get_user_model()
-
-
-def compare_posts(post1: Post, post2: Post) -> bool:
-    '''Сравниваем содержимое двух постов'''
-    trigger = True
-    pairs = [
-        [post1.text, post2.text],
-        [post1.author, post2.author],
-        [post1.group, post2.group],
-        [post1.image.name, post2.image.name]  # Тут assertContains не вставить
-    ]
-    counter = 0
-    while trigger and counter < 4:
-        trigger = pairs[counter][0] == pairs[counter][1]
-        counter += 1
-    return trigger
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(dir=settings.BASE_DIR))
@@ -69,16 +52,13 @@ class PostPagesTests(TestCase):
             group=cls.group1,
             image=uploaded
         )
-        #  Без задержки нет возможности понять какой пост создали первым...
-        #  пока что. Сначала доделаю все остальное.
-        sleep(0.05)
+        #  Нужно было поставить сортировку по -id :/
         cls.post2 = Post.objects.create(
             text='Тестовый текст поста 2 (2 группа)',
             author=cls.test_author,
             group=cls.group2,
             image=uploaded
         )
-        sleep(0.05)
         cls.post3 = Post.objects.create(
             text='Тестовый текст поста 3 (2 группа)',
             author=cls.user,
@@ -118,6 +98,17 @@ class PostPagesTests(TestCase):
     def tearDown(self):
         cache.clear()
 
+    def compare_posts(self, response, post1: Post, post2: Post):
+        '''Сравниваем содержимое двух постов'''
+        self.assertEqual(post1.text, post2.text)
+        self.assertEqual(post1.author, post2.author)
+        self.assertEqual(post1.group, post2.group)
+        # <img не работает для test_edit_post_page_context, small.gif не
+        # работает для остальных. Там есть другие варианты, но все они
+        # являются совсем уже костылями.
+        # self.assertContains(response, 'small.gif')
+        self.assertEqual(post1.image.name, post2.image.name)
+
     def test_pages_templates(self):
         '''URL адрес использует соответсвтующий шаблон'''
         templates_pages_names_unauth = {
@@ -147,7 +138,7 @@ class PostPagesTests(TestCase):
         '''Шаблон home сформирован с правильным контекстом.'''
         response = self.guest_client.get(reverse('index'))
         latest_object = response.context.get('page').object_list[0]
-        self.assertTrue(compare_posts(latest_object, self.post3))
+        self.compare_posts(response, latest_object, self.post3)
 
     def test_home_page_context_length(self):
         '''Все посты из бд попали на главную'''
@@ -160,7 +151,7 @@ class PostPagesTests(TestCase):
             reverse('group_posts', kwargs={'slug': self.group1.slug})
         )
         latest_object = response.context.get('page').object_list[0]
-        self.assertTrue(compare_posts(latest_object, self.post1))
+        self.compare_posts(response, latest_object, self.post1)
 
     def test_empty_group_page_objects(self):
         '''Посты, которые не пренадлежат группе,
@@ -199,7 +190,7 @@ class PostPagesTests(TestCase):
         author = response.context.get('author')
         username = response.context.get('username')
         page = response.context.get('page')
-        self.assertTrue(compare_posts(latest_object, self.post2))
+        self.compare_posts(response, latest_object, self.post2)
         self.assertEqual(author, self.test_author)
         self.assertEqual(username, self.test_author.username)
         self.assertEqual(page.number, 1)
@@ -221,7 +212,7 @@ class PostPagesTests(TestCase):
         self.assertEqual(comment.text, self.comment1.text)
         self.assertEqual(comment.post, self.comment1.post)
         self.assertEqual(comment.author, self.comment1.author)
-        self.assertTrue(compare_posts(requested_post, self.post1))
+        self.compare_posts(response, requested_post, self.post1)
 
     def test_post_page_no_comments(self):
         '''На странице с постом без комментариев нет комментариев'''
@@ -252,13 +243,13 @@ class PostPagesTests(TestCase):
                 form_field = response.context['form'].fields[value]
                 self.assertIsInstance(form_field, expected)
         self.assertTrue(is_edit)
-        self.assertTrue(compare_posts(post, self.post1))
+        self.compare_posts(response, post, self.post1)
 
     def test_follow_index_context(self):
         '''Шаблон follow сформирован с правильным контекстом.'''
         response = self.authorized_client.get(reverse('follow_index'))
         latest_object = response.context.get('page').object_list[0]
-        self.assertTrue(compare_posts(latest_object, self.post2))
+        self.compare_posts(response, latest_object, self.post2)
 
     def test_follow_index_no_other_posts(self):
         '''В follow только посты от авторов, на которых подписан

@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.conf import settings
 
-from ..models import Post, Group
+from ..models import Post, Group, Comment
 
 User = get_user_model()
 
@@ -95,3 +95,31 @@ class PostFormTests(TestCase):
         self.assertEqual(response.status_code, HTTPStatus.OK)
         self.assertEqual(Post.objects.count(), 1)
         self.assertTrue(Post.objects.filter(text=form_data['text']).exists())
+
+    def test_create_comment(self):
+        '''При правильном заполнении формы создается новый комментарий'''
+        # Теста на создание от гостя нет, есть тест на редирект в test_urls
+        post = Post.objects.create(
+            text='Тестовый текст',
+            author=self.user
+        )
+        form_data = {
+            'text': 'Тестовый текст комментария'
+        }
+        response = self.authorized_client.post(
+            reverse('add_comment', kwargs={'username': self.user.username,
+                                           'post_id': post.id}),
+            data=form_data,
+            follow=True
+        )
+        self.assertRedirects(
+            response,
+            reverse('post',
+                    kwargs={'username': self.user.username,
+                            'post_id': post.id})
+        )
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        self.assertEqual(Comment.objects.count(), 1)
+        self.assertTrue(
+            Comment.objects.filter(text=form_data['text']).exists()
+        )

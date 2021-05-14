@@ -3,6 +3,7 @@
 {% block header %}Ваши подписки{% endblock %}
 {% block content %}
 
+    <!-- Я изменил index на follow же, все работает -->
     {% include "includes/menu.html" with follow=True %}
 
     {% for post in page %}

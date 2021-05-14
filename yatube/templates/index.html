@@ -1,12 +1,11 @@
 {% extends "base.html" %} 
 {% block title %} Последние обновления {% endblock %}
-
+{% block header %}Последние обновления на сайте{% endblock %}
 {% block content %}
     <div class="container">
 
             {% include "includes/menu.html" with index=True%}
 
-           <h1> Последние обновления на сайте</h1>
            {% load cache %}
            {% cache 20 post_list_index %}
                 {% for post in page %}

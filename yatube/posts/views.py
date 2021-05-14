@@ -2,9 +2,6 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
-# from django.views.decorators.cache import cache_page
-# from django.core.cache import cache
-# from django.urls import reverse
 
 from .models import Comment, Post, Group, Follow
 from .forms import PostForm, CommentForm
@@ -13,11 +10,8 @@ User = get_user_model()
 CACHE_TIME = 20
 
 
-# @cache_page(CACHE_TIME)
-# Там проблема была в том, что я из views не мог отдельный элемент не
-# кэшировать (или тереть кэш страницы при взаимодействии с ним), так что
-# key_prefix не особо помог бы (ну если я все правильно понимаю).
 def index(request):
+    '''Главная страница'''
     post_list = Post.objects.all()
     paginator = Paginator(post_list, 10)
     page_number = request.GET.get('page')
@@ -29,8 +23,8 @@ def index(request):
     )
 
 
-# @cache_page(CACHE_TIME)
 def group_posts(request, slug):
+    '''Страница группы'''
     group = get_object_or_404(Group, slug=slug)
     post_list = group.posts.all()
     paginator = Paginator(post_list, 10)
@@ -41,6 +35,7 @@ def group_posts(request, slug):
 
 @login_required
 def new_post(request):
+    '''Создание нового поста'''
     form = PostForm(request.POST or None, files=request.FILES or None,)
     if form.is_valid():
         post = form.save(commit=False)
@@ -51,8 +46,8 @@ def new_post(request):
                   'is_edit': False})
 
 
-# @cache_page(CACHE_TIME)
 def profile(request, username):
+    '''Страница профиля пользователя'''
     author = User.objects.get(username=username)
     post_list = author.posts.all()
     paginator = Paginator(post_list, 10)
@@ -72,6 +67,7 @@ def profile(request, username):
 
 
 def post_view(request, username, post_id):
+    '''Страница поста'''
     requested_post = Post.objects.get(pk=post_id)
     comments = Comment.objects.filter(post=post_id)
     form = CommentForm(request.POST or None)
@@ -87,6 +83,7 @@ def post_view(request, username, post_id):
 
 @login_required
 def post_edit(request, username, post_id):
+    '''Страница редактирования поста'''
     if request.user.username != username:
         return redirect('post', username, post_id)
     post = get_object_or_404(Post, id=post_id)
@@ -102,10 +99,10 @@ def post_edit(request, username, post_id):
 
 @login_required
 def add_comment(request, username, post_id):
+    '''Добавление комментария на странице поста'''
     form = CommentForm(request.POST or None)
-    # Зачем добавлять фильтр на автора? Мы же ищем пост по id, там однозначно
-    # известен автор?
-    requested_post = get_object_or_404(Post, id=post_id)
+    requested_post = get_object_or_404(Post, id=post_id,
+                                       author__username=username)
     if form.is_valid():
         comment = form.save(commit=False)
         comment.author = request.user
@@ -116,7 +113,7 @@ def add_comment(request, username, post_id):
 
 @login_required
 def follow_index(request):
-    # Это было очень больно
+    '''Страница подписок'''
     posts = Post.objects.filter(author__following__user=request.user)
     paginator = Paginator(posts, 10)
     page_number = request.GET.get('page')
@@ -126,24 +123,19 @@ def follow_index(request):
 
 @login_required
 def profile_follow(request, username):
+    '''Подписка на пользователя (кнока на странице профиля пользователя)'''
     author = get_object_or_404(User, username=username)
     if request.user != author:
-        possible_follow_link = Follow.objects.filter(
-            user=request.user, author=author).exists()
-        if not possible_follow_link:
-            Follow.objects.create(
-                user=request.user,
-                author=author
-            )
+        Follow.objects.get_or_create(user=request.user, author=author)
     return redirect('profile', username)
 
 
 @login_required
 def profile_unfollow(request, username):
+    '''Отписка от пользователя (кнока на странице профиля пользователя)'''
     follow_link = get_object_or_404(Follow, user=request.user,
                                     author__username=username)
-    if follow_link:
-        follow_link.delete()
+    follow_link.delete()
     return redirect('profile', username)
 
 
